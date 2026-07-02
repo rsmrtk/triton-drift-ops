@@ -45,6 +45,11 @@ def main() -> None:
         output_names=["logits"],
         dynamic_axes={"input": {0: "batch_size"}, "logits": {0: "batch_size"}},
         opset_version=args.opset,
+        # torch>=2.9 defaults to the dynamo exporter, which pins the output
+        # shape to [1, 43] despite dynamic_axes — Triton then rejects the
+        # model because batching needs a -1 first dimension. The legacy
+        # exporter honors dynamic_axes (and writes a single .onnx file).
+        dynamo=False,
     )
     print(f"exported ONNX model to {out_path}")
 

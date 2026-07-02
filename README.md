@@ -64,21 +64,46 @@ Built incrementally, in order — each stage only starts once the previous
 one is proven working:
 
 - [x] Repo scaffolding
-- [x] Stage 0 — Docker + NVIDIA Container Toolkit smoke test (`docker/nvidia-smoke-test`) — written, not yet run on real GPU hardware
+- [x] Stage 0 — Docker + NVIDIA Container Toolkit smoke test (`docker/nvidia-smoke-test`) — **passed on a real L4** (GCP g2-standard-4, driver 580, CUDA 13.0)
 - [x] Stage 1 — Baseline training script on GTSRB (`training/train.py`) — **validated on CPU**: 1 epoch, test accuracy 0.9096 (383 s), model + drift baseline saved
 - [x] Stage 2 — MLflow tracking + model registry integration (`--log-mlflow` flag in `train.py`, `training/promote.py` with a promotion gate) — written, not yet run against a live MLflow server
 - [x] Stage 3 — Drift simulation (fog/night/noise/motion-blur transforms, `drift/transforms.py`) + offline drift evaluation (`drift/evaluate_drift.py`) + online drift monitor with Prometheus metrics (`drift/monitor.py`) — **offline evaluation run against the trained model**, see the drift impact table below
 - [x] Stage 4 — Auto-retraining trigger: PrometheusRule on drift metrics (`k8s/alerts/drift-alert-rule.yaml`), AlertManager routing (`k8s/alerts/alertmanager-config.yaml`), idempotent webhook that creates a K8s training Job (`k8s/retrain-webhook`) — written, not yet run
-- [x] Stage 5 — NVIDIA Triton model repository + config (`serving/model_repository`), ONNX export (`serving/export_onnx.py`), HTTP client (`serving/client.py`), inference gateway that feeds live confidences to the drift monitor (`serving/gateway`), local `docker-compose.yaml` — written, not yet run
+- [x] Stage 5 — NVIDIA Triton model repository + config (`serving/model_repository`), ONNX export (`serving/export_onnx.py`), HTTP client (`serving/client.py`), inference gateway that feeds live confidences to the drift monitor (`serving/gateway`), local `docker-compose.yaml` — **verified on GPU**: Triton served the ONNX model on an L4, 4 200+ inferences through the gateway, 0 errors
 - [x] Stage 6 — Promotion gate (`training/promote.py` only promotes a version if its logged accuracy beats the current champion's)
 - [x] Stage 7 — Helm chart for the whole stack with a CPU/GPU toggle (`helm/triton-drift-ops`), ArgoCD Application (`argocd/app.yaml`), CI building all three images (`.github/workflows/ci.yaml`) — lints and renders, not yet deployed
-- [ ] Stage 8 — End-to-end GPU run (cloud trial credits) + demo capture — plan in [docs/stage8-gpu-run.md](docs/stage8-gpu-run.md); demo traffic generator in `scripts/traffic_generator.py`; **CPU training smoke run passed** (see Stage 1)
+- [x] Stage 8 — End-to-end GPU run — **done on GCP (g2-standard-4, 1× L4)**: training, Triton GPU serving, live drift detection and a firing Prometheus alert; measured results below. Plan/runbook in [docs/stage8-gpu-run.md](docs/stage8-gpu-run.md)
 
-**Current limitation:** the training loop and offline drift evaluation are
-validated on CPU; what remains unverified end to end is the live serving
-side — MLflow against a real tracking server, Triton serving the exported
-model, and the alert → retrain Job path on a cluster. That is exactly the
-Stage 8 GPU run.
+**Current limitation:** two pieces have still only run in CI/lint, not
+live: MLflow tracking against a real server (training ran without
+`--log-mlflow` on the GPU box) and the AlertManager → webhook → K8s
+retraining Job path, which needs a cluster — next step is replaying that
+loop on a local k3d cluster (CPU is enough for it).
+
+## Stage 8 — measured GPU results
+
+Single GCP `g2-standard-4` (1× NVIDIA L4), same containers CI builds:
+
+**Training** (`ghcr.io/rsmrtk/triton-drift-ops-training`, unchanged code,
+only `--device cuda`):
+
+| | CPU (dev laptop) | NVIDIA L4 |
+|---|---|---|
+| wall time / epoch | 383 s | **11.2 s (~34× faster)** |
+| test accuracy | 0.9096 (1 epoch) | **0.9698 (15 epochs)** |
+
+**Live drift detection** (Triton on GPU → gateway → KS-test monitor →
+Prometheus, `scripts/traffic_generator.py` at 6 rps):
+
+| | clean traffic | night traffic (low light) |
+|---|---|---|
+| `model_drift_score` (KS) | 0.086 | **0.441** |
+| mean confidence | 0.993 | 0.867 |
+| low-confidence ratio | 0.2% | 11.4% |
+
+`ModelDriftDetected` (threshold 0.25, sustained) went to **firing** in
+Prometheus ~4 minutes after the traffic switched to the night scenario —
+no labels needed, confidence distribution alone. 4 200+ requests, 0 errors.
 
 ## Drift impact (measured)
 

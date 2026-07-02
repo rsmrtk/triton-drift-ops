@@ -1,3 +1,9 @@
 tritonclient[http]>=2.48.0
 numpy>=1.26.4
 pillow>=10.4.0
+
+
+# export_onnx.py only — torch>=2.9 routes torch.onnx.export through the
+# dynamo exporter, which imports onnxscript even for opset-pinned exports
+onnx>=1.16
+onnxscript>=0.1
