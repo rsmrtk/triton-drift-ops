@@ -39,6 +39,11 @@ retrainWebhook:
     repository: ghcr.io/rsmrtk/triton-drift-ops-retrain-webhook
     tag: latest
   trainImage: ghcr.io/rsmrtk/triton-drift-ops-training:latest
+  # cpu makes the retrain Job schedulable on clusters without GPUs
+  # (mirrors triton.gpu above); keep epochs small there for the same reason
+  trainDevice: cuda
+  trainEpochs: "15"
+  mlflowTrackingUri: http://mlflow:5000
   resources:
     requests:
       cpu: 50m

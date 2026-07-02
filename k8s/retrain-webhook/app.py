@@ -26,6 +26,11 @@ logger = logging.getLogger(__name__)
 
 NAMESPACE = os.getenv("NAMESPACE", "geo-mlops")
 TRAIN_IMAGE = os.getenv("TRAIN_IMAGE", "ghcr.io/rsmrtk/triton-drift-ops-training:latest")
+# cuda on a GPU cluster; cpu lets the same webhook run on a CPU-only
+# cluster (k3d, CI) where a nvidia.com/gpu request would never schedule
+TRAIN_DEVICE = os.getenv("TRAIN_DEVICE", "cuda")
+TRAIN_EPOCHS = os.getenv("TRAIN_EPOCHS", "15")
+MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
 RETRAIN_JOB_LABEL = "app=model-retrain"
 
 app = FastAPI(title="retrain-webhook")
@@ -49,6 +54,16 @@ def retrain_job_already_running() -> bool:
 
 def build_retrain_job_manifest() -> client.V1Job:
     job_name = f"model-retrain-{int(time.time())}"
+    if TRAIN_DEVICE == "cuda":
+        resources = client.V1ResourceRequirements(
+            requests={"nvidia.com/gpu": "1", "memory": "4Gi", "cpu": "2"},
+            limits={"nvidia.com/gpu": "1", "memory": "8Gi", "cpu": "4"},
+        )
+    else:
+        resources = client.V1ResourceRequirements(
+            requests={"memory": "2Gi", "cpu": "1"},
+            limits={"memory": "4Gi", "cpu": "4"},
+        )
     return client.V1Job(
         metadata=client.V1ObjectMeta(name=job_name, labels={"app": "model-retrain"}),
         spec=client.V1JobSpec(
@@ -62,16 +77,17 @@ def build_retrain_job_manifest() -> client.V1Job:
                             name="trainer",
                             image=TRAIN_IMAGE,
                             command=["python", "train.py"],
-                            args=["--epochs", "15", "--device", "cuda", "--log-mlflow"],
+                            args=[
+                                "--epochs", TRAIN_EPOCHS,
+                                "--device", TRAIN_DEVICE,
+                                "--log-mlflow",
+                            ],
                             env=[
                                 client.V1EnvVar(
-                                    name="MLFLOW_TRACKING_URI", value="http://mlflow:5000"
+                                    name="MLFLOW_TRACKING_URI", value=MLFLOW_TRACKING_URI
                                 ),
                             ],
-                            resources=client.V1ResourceRequirements(
-                                requests={"nvidia.com/gpu": "1", "memory": "4Gi", "cpu": "2"},
-                                limits={"nvidia.com/gpu": "1", "memory": "8Gi", "cpu": "4"},
-                            ),
+                            resources=resources,
                         )
                     ],
                 )

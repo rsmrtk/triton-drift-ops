@@ -55,6 +55,12 @@ spec:
                   fieldPath: metadata.namespace
             - name: TRAIN_IMAGE
               value: {{ .Values.retrainWebhook.trainImage | quote }}
+            - name: TRAIN_DEVICE
+              value: {{ .Values.retrainWebhook.trainDevice | quote }}
+            - name: TRAIN_EPOCHS
+              value: {{ .Values.retrainWebhook.trainEpochs | quote }}
+            - name: MLFLOW_TRACKING_URI
+              value: {{ .Values.retrainWebhook.mlflowTrackingUri | quote }}
           readinessProbe:
             httpGet:
               path: /health
