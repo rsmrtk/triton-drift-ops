@@ -36,6 +36,10 @@ spec:
                   value: {{ .Values.retrainWebhook.mlflowTrackingUri | quote }}
                 - name: TRITON_KIND
                   value: {{ .Values.triton.gpu | ternary "KIND_GPU" "KIND_CPU" | quote }}
+                - name: MODEL_REPO
+                  value: /models/repo
+                - name: BASELINE_DIR
+                  value: /models/baseline
               volumeMounts:
                 - name: model-repository
                   mountPath: /models

@@ -33,7 +33,12 @@ logger = logging.getLogger(__name__)
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
 MODEL_NAME = os.getenv("MODEL_NAME", "traffic-sign-classifier")
 TRITON_MODEL_NAME = os.getenv("TRITON_MODEL_NAME", "traffic_sign_classifier")
-MODEL_REPO = Path(os.getenv("MODEL_REPO", "/models"))
+MODEL_REPO = Path(os.getenv("MODEL_REPO", "/models/repo"))
+# where the gateway looks for the drift baseline (its /baseline mount);
+# the baseline travels with the champion so drift is always measured
+# against the distribution of the model actually being served
+BASELINE_DIR = Path(os.getenv("BASELINE_DIR", "/models/baseline"))
+BASELINE_FILE = "baseline_confidences.npy"
 # KIND_CPU or KIND_GPU — must match what the Triton pod can schedule on
 TRITON_KIND = os.getenv("TRITON_KIND", "KIND_CPU")
 ALIAS = "champion"
@@ -118,6 +123,15 @@ def main() -> int:
         "champion v%s exported — Triton's poll loop will load it within seconds",
         champion.version,
     )
+
+    try:
+        BASELINE_DIR.mkdir(parents=True, exist_ok=True)
+        downloaded = client.download_artifacts(champion.run_id, BASELINE_FILE, str(BASELINE_DIR))
+        logger.info("baseline distribution synced to %s", downloaded)
+    except MlflowException as e:
+        # a champion without a logged baseline still serves — the gateway
+        # just reports no drift, same degradation stance as everywhere else
+        logger.warning("no %s artifact on champion run: %s", BASELINE_FILE, e)
     return 0
 
 

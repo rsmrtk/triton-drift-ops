@@ -28,12 +28,25 @@ spec:
       labels:
         app: triton
     spec:
+      initContainers:
+        # Triton exits if the repository path doesn't exist yet; the PVC
+        # starts empty until the first champion-sync run
+        - name: init-repo
+          image: busybox:1.36
+          command: ["mkdir", "-p", "/models/repo"]
+          volumeMounts:
+            - name: model-repository
+              mountPath: /models
       containers:
         - name: triton
           image: "{{ .Values.triton.image.repository }}:{{ .Values.triton.image.tag }}"
           args:
             - tritonserver
-            - --model-repository=/models
+            # repo/ subdirectory, not the PVC root: the same PVC also
+            # carries the drift baseline (gateway mounts subPath
+            # "baseline"), and Triton refuses to start if the repository
+            # root contains anything that isn't a model directory
+            - --model-repository=/models/repo
             # poll mode: a new model version dropped into the PVC is
             # picked up live — this is how promotion reaches serving
             # without a pod restart
