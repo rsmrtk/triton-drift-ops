@@ -61,6 +61,8 @@ spec:
               value: {{ .Values.retrainWebhook.trainEpochs | quote }}
             - name: MLFLOW_TRACKING_URI
               value: {{ .Values.retrainWebhook.mlflowTrackingUri | quote }}
+            - name: TRAIN_DATA_HOSTPATH
+              value: {{ .Values.retrainWebhook.trainDataHostPath | quote }}
           readinessProbe:
             httpGet:
               path: /health

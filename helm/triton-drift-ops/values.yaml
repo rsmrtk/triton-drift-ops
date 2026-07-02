@@ -44,6 +44,9 @@ retrainWebhook:
   trainDevice: cuda
   trainEpochs: "15"
   mlflowTrackingUri: http://mlflow:5000
+  # optional node path with pre-downloaded GTSRB — mounted read-only into
+  # the retrain Job instead of downloading the dataset every run
+  trainDataHostPath: ""
   resources:
     requests:
       cpu: 50m

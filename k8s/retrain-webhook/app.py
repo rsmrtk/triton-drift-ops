@@ -31,6 +31,11 @@ TRAIN_IMAGE = os.getenv("TRAIN_IMAGE", "ghcr.io/rsmrtk/triton-drift-ops-training
 TRAIN_DEVICE = os.getenv("TRAIN_DEVICE", "cuda")
 TRAIN_EPOCHS = os.getenv("TRAIN_EPOCHS", "15")
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
+# node path with a pre-downloaded GTSRB; when set, the Job mounts it
+# read-only instead of downloading ~2GB into ephemeral storage per run
+# (which is both slow and an eviction risk on small nodes)
+TRAIN_DATA_HOSTPATH = os.getenv("TRAIN_DATA_HOSTPATH", "")
+DATA_MOUNT = "/data/gtsrb-data"
 RETRAIN_JOB_LABEL = "app=model-retrain"
 
 app = FastAPI(title="retrain-webhook")
@@ -81,6 +86,11 @@ def build_retrain_job_manifest() -> client.V1Job:
                                 "--epochs", TRAIN_EPOCHS,
                                 "--device", TRAIN_DEVICE,
                                 "--log-mlflow",
+                                *(
+                                    ["--data-dir", DATA_MOUNT]
+                                    if TRAIN_DATA_HOSTPATH
+                                    else []
+                                ),
                             ],
                             env=[
                                 client.V1EnvVar(
@@ -88,8 +98,31 @@ def build_retrain_job_manifest() -> client.V1Job:
                                 ),
                             ],
                             resources=resources,
+                            volume_mounts=(
+                                [
+                                    client.V1VolumeMount(
+                                        name="gtsrb-data",
+                                        mount_path=DATA_MOUNT,
+                                        read_only=True,
+                                    )
+                                ]
+                                if TRAIN_DATA_HOSTPATH
+                                else None
+                            ),
                         )
                     ],
+                    volumes=(
+                        [
+                            client.V1Volume(
+                                name="gtsrb-data",
+                                host_path=client.V1HostPathVolumeSource(
+                                    path=TRAIN_DATA_HOSTPATH, type="Directory"
+                                ),
+                            )
+                        ]
+                        if TRAIN_DATA_HOSTPATH
+                        else None
+                    ),
                 )
             ),
         ),
