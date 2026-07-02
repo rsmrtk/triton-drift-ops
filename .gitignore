@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# data & model artifacts — never commit datasets or trained weights
+data/
+*.pt
+*.pth
+*.onnx
+*.engine
+mlruns/
+
+# secrets
+*.env
+.env
+*key.json
+kubeconfig*
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
