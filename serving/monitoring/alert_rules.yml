@@ -1,0 +1,44 @@
+# Demo-tuned mirror of k8s/alerts/drift-alert-rule.yaml. Same expressions
+# and thresholds; only `for:` is shortened (10m -> 2m, 5m -> 1m) so a live
+# demo doesn't stand still for ten minutes. Production keeps the
+# conservative windows — see the rationale in the k8s rule file.
+
+groups:
+  - name: model-drift
+    rules:
+      - alert: ModelDriftDetected
+        expr: model_drift_score > 0.25
+        for: 2m
+        labels:
+          severity: warning
+          action: retrain
+        annotations:
+          summary: "Traffic sign classifier drift score above threshold"
+          description: >-
+            model_drift_score has been above 0.25 (current: {{ $value }}).
+            Live prediction confidence distribution has shifted from the
+            training baseline. In the k8s deployment this alert triggers
+            the automatic retraining Job.
+
+      - alert: ModelDriftSevere
+        expr: model_drift_score > 0.45
+        for: 1m
+        labels:
+          severity: critical
+          action: retrain
+        annotations:
+          summary: "Traffic sign classifier severe drift — model likely unreliable"
+          description: >-
+            model_drift_score above 0.45 (current: {{ $value }}).
+
+      - alert: ModelLowConfidenceSpike
+        expr: model_low_confidence_ratio > 0.4
+        for: 2m
+        labels:
+          severity: warning
+          action: retrain
+        annotations:
+          summary: "High proportion of low-confidence predictions"
+          description: >-
+            Over 40% of recent predictions have confidence below 0.5
+            (current: {{ $value }}).

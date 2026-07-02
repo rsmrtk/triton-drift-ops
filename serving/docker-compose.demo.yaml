@@ -1,0 +1,49 @@
+# Stage 8 demo overlay: GPU serving + the monitoring UI the drift loop
+# reports into. Combines with the base file:
+#
+#   GRAFANA_ADMIN_PASSWORD=... docker compose \
+#     -f docker-compose.yaml -f docker-compose.demo.yaml up -d
+#
+# The Grafana admin password comes from the environment on purpose — on
+# the demo VM it's fetched from GCP Secret Manager (see
+# docs/stage8-gpu-run.md), never from a file in this repo.
+#
+# The k8s deployment gets the same monitoring from kube-prometheus-stack
+# (helm/ + k8s/alerts/); this overlay is the single-VM equivalent so the
+# demo doesn't need a cluster.
+
+services:
+  triton:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - gateway
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD (Secret Manager on the demo VM)}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus

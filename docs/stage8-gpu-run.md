@@ -13,15 +13,13 @@ the VM the same day**.
 ## 1. VM with GPU (GCP free trial)
 
 ```bash
-gcloud compute instances create triton-drift-gpu \
-  --zone=us-central1-a \
-  --machine-type=g2-standard-4 \
-  --accelerator=type=nvidia-l4,count=1 \
-  --image-family=common-cu124-ubuntu-2204 \
-  --image-project=deeplearning-platform-release \
-  --boot-disk-size=100GB \
-  --maintenance-policy=TERMINATE
+PROJECT=triton-drift scripts/gcp/create_vm.sh   # and delete_vm.sh when done
 ```
+
+(The script pins the current Deep Learning VM image family —
+`common-cu129-ubuntu-2404-nvidia-580` as of 2026-07 — and requests
+`cloud-platform` scopes so the VM can read the Grafana admin password
+from Secret Manager.)
 
 The Deep Learning VM image ships with the NVIDIA driver and Docker +
 NVIDIA Container Toolkit preinstalled — no manual driver installs.
@@ -67,6 +65,15 @@ Then hit the gateway with test images (`serving/client.py` or curl) and
 screenshot Triton's startup log showing the model loaded on GPU.
 
 ## 5. The demo loop (the money shot)
+
+Monitoring for the single-VM demo comes from the compose overlay —
+Prometheus (`:9090`, drift alert rules loaded) + a provisioned Grafana
+dashboard (`:3000`, password from Secret Manager):
+
+```bash
+export GRAFANA_ADMIN_PASSWORD=$(gcloud secrets versions access latest --secret=grafana-admin-password)
+docker compose -f docker-compose.yaml -f docker-compose.demo.yaml up -d
+```
 
 1. Send a stream of clean GTSRB test images through the gateway —
    Grafana shows `model_drift_score` near 0.
