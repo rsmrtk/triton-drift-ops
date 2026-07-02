@@ -1,0 +1,61 @@
+# PrometheusRule for kube-prometheus-stack (or any Prometheus Operator
+# install). Fires when the drift monitor's KS-statistic (drift/monitor.py)
+# stays above threshold for a sustained window — a single noisy spike
+# shouldn't trigger a retraining job, a sustained shift should.
+#
+# `for: 10m` is deliberately conservative: retraining is expensive (uses
+# GPU budget) and irreversible-ish (a bad retrain still needs to lose the
+# promotion gate comparison), so this favors avoiding false positives over
+# catching drift instantly.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: model-drift-alerts
+  namespace: geo-mlops  # reuses the namespace convention from geo-mlops-infra
+  labels:
+    release: monitoring  # matches kube-prometheus-stack's ruleSelector
+spec:
+  groups:
+    - name: model-drift
+      rules:
+        - alert: ModelDriftDetected
+          expr: model_drift_score > 0.25
+          for: 10m
+          labels:
+            severity: warning
+            action: retrain
+          annotations:
+            summary: "Traffic sign classifier drift score above threshold"
+            description: >-
+              model_drift_score has been above 0.25 for 10 minutes
+              (current: {{ $value }}). Live prediction confidence
+              distribution has shifted from the training baseline —
+              likely input distribution change (weather, lighting,
+              camera). Triggers an automatic retraining Job.
+
+        - alert: ModelDriftSevere
+          expr: model_drift_score > 0.45
+          for: 5m
+          labels:
+            severity: critical
+            action: retrain
+          annotations:
+            summary: "Traffic sign classifier severe drift — model likely unreliable"
+            description: >-
+              model_drift_score above 0.45 for 5 minutes (current:
+              {{ $value }}). Consider routing traffic away from this model
+              version while retraining runs.
+
+        - alert: ModelLowConfidenceSpike
+          expr: model_low_confidence_ratio > 0.4
+          for: 10m
+          labels:
+            severity: warning
+            action: retrain
+          annotations:
+            summary: "High proportion of low-confidence predictions"
+            description: >-
+              Over 40% of recent predictions have confidence below 0.5
+              (current: {{ $value }}) — model is unsure about a large
+              share of live traffic, independent of the KS-test drift
+              score.

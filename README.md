@@ -68,7 +68,7 @@ one is proven working:
 - [x] Stage 1 — Baseline training script on GTSRB (`training/train.py`) — written, syntax-checked; not yet run end to end (blocked locally by disk space, see below)
 - [x] Stage 2 — MLflow tracking + model registry integration (`--log-mlflow` flag in `train.py`, `training/promote.py` with a promotion gate) — written, not yet run against a live MLflow server
 - [x] Stage 3 — Drift simulation (fog/night/noise/motion-blur transforms, `drift/transforms.py`) + offline drift evaluation (`drift/evaluate_drift.py`) + online drift monitor with Prometheus metrics (`drift/monitor.py`) — written, not yet run
-- [ ] Stage 4 — Auto-retraining trigger (Prometheus alert → K8s Job)
+- [x] Stage 4 — Auto-retraining trigger: PrometheusRule on drift metrics (`k8s/alerts/drift-alert-rule.yaml`), AlertManager routing (`k8s/alerts/alertmanager-config.yaml`), idempotent webhook that creates a K8s training Job (`k8s/retrain-webhook`) — written, not yet run
 - [x] Stage 5 — NVIDIA Triton model repository + config (`serving/model_repository`), ONNX export (`serving/export_onnx.py`), HTTP client (`serving/client.py`), local `docker-compose.yaml` — written, not yet run
 - [x] Stage 6 — Promotion gate (`training/promote.py` only promotes a version if its logged accuracy beats the current champion's)
 - [ ] Stage 7 — Helm charts + ArgoCD Application manifests

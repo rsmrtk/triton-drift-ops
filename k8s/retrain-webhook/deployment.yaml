@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: retrain-webhook
+  namespace: geo-mlops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: retrain-webhook
+  template:
+    metadata:
+      labels:
+        app: retrain-webhook
+    spec:
+      serviceAccountName: retrain-webhook
+      containers:
+        - name: retrain-webhook
+          image: ghcr.io/rsmrtk/triton-drift-ops-retrain-webhook:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: NAMESPACE
+              value: "geo-mlops"
+            - name: TRAIN_IMAGE
+              value: "ghcr.io/rsmrtk/triton-drift-ops-training:latest"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: retrain-webhook
+  namespace: geo-mlops
+spec:
+  selector:
+    app: retrain-webhook
+  ports:
+    - port: 8080
+      targetPort: 8080
