@@ -24,6 +24,10 @@ metadata:
     app: mlflow
 spec:
   replicas: 1
+  # Recreate, not RollingUpdate: the store PVC is RWO, so the old pod
+  # must release it before the new one can mount
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: mlflow
