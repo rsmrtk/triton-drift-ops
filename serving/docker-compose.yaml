@@ -22,3 +22,20 @@ services:
       - "8002:8002"  # metrics (Prometheus-scrapeable)
     volumes:
       - ./model_repository:/models
+
+  gateway:
+    build:
+      context: ..
+      dockerfile: serving/gateway/Dockerfile
+    environment:
+      TRITON_URL: "triton:8000"
+      # produced by training/train.py next to the weights; mount it in
+      # to arm drift detection — without it the gateway serves but
+      # reports no drift
+      BASELINE_PATH: "/baseline/baseline_confidences.npy"
+    volumes:
+      - ../training:/baseline:ro
+    ports:
+      - "8081:8081"
+    depends_on:
+      - triton

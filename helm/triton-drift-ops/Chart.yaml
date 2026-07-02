@@ -1,0 +1,8 @@
+apiVersion: v2
+name: triton-drift-ops
+description: >-
+  Triton inference serving + drift-aware gateway + auto-retraining webhook
+  for the traffic sign classifier.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

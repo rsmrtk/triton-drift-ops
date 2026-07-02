@@ -67,6 +67,25 @@ def evaluate(model, loader, device) -> float:
     return correct / total
 
 
+@torch.no_grad()
+def collect_confidences(model, loader, device) -> "np.ndarray":
+    """
+    Softmax confidence of the predicted class for every test sample.
+    This is the training-time baseline the online drift monitor compares
+    live traffic against (drift/monitor.py) — saved next to the weights
+    and shipped to the inference gateway.
+    """
+    import numpy as np
+
+    model.eval()
+    confidences: list[float] = []
+    for images, _ in loader:
+        images = images.to(device)
+        probs = torch.softmax(model(images), dim=1)
+        confidences.extend(probs.max(dim=1).values.cpu().tolist())
+    return np.array(confidences, dtype=np.float32)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=5)
@@ -123,11 +142,23 @@ def main() -> None:
     torch.save(model.state_dict(), args.out)
     logger.info("saved model weights to %s", args.out)
 
+    import numpy as np
+
+    baseline = collect_confidences(model, test_loader, device)
+    baseline_path = Path(args.out).with_name("baseline_confidences.npy")
+    np.save(baseline_path, baseline)
+    logger.info(
+        "saved %d baseline confidences to %s (mean %.4f)",
+        len(baseline), baseline_path, baseline.mean(),
+    )
+
     if args.log_mlflow:
-        log_to_mlflow(model, args, final_accuracy)
+        log_to_mlflow(model, args, final_accuracy, baseline_path)
 
 
-def log_to_mlflow(model: nn.Module, args: argparse.Namespace, accuracy: float) -> None:
+def log_to_mlflow(
+    model: nn.Module, args: argparse.Namespace, accuracy: float, baseline_path: Path
+) -> None:
     import mlflow
     import mlflow.pytorch
 
@@ -145,6 +176,9 @@ def log_to_mlflow(model: nn.Module, args: argparse.Namespace, accuracy: float) -
             }
         )
         mlflow.log_metric("accuracy", accuracy)
+        # baseline distribution travels with the model version so the
+        # gateway always compares live traffic against the right baseline
+        mlflow.log_artifact(str(baseline_path))
         mlflow.pytorch.log_model(model, artifact_path="model", registered_model_name=MODEL_NAME)
 
     logger.info("logged run to MLflow, registered as '%s'", MODEL_NAME)

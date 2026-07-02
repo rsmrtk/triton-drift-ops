@@ -1,0 +1,23 @@
+# Point repoURL at your fork. Same GitOps stance as geo-mlops-infra:
+# nothing is kubectl-applied by hand except this one file — ArgoCD
+# reconciles everything else from Git, and reverts manual drift.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: triton-drift-ops
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/rsmrtk/triton-drift-ops
+    targetRevision: HEAD
+    path: helm/triton-drift-ops
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: geo-mlops
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

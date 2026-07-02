@@ -1,0 +1,48 @@
+namespace: geo-mlops
+
+triton:
+  image:
+    repository: nvcr.io/nvidia/tritonserver
+    tag: 24.09-py3
+  # gpu: false runs Triton on CPU (matches config.pbtxt KIND_CPU) so the
+  # whole stack deploys on a cluster without GPUs; flip to true for the
+  # real GPU run — adds nvidia.com/gpu to requests/limits
+  gpu: false
+  modelRepository:
+    # PVC holding the model repository; populated by the export step
+    # (serving/export_onnx.py) or an init job — never baked into the image
+    size: 2Gi
+    storageClass: ""
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+
+gateway:
+  image:
+    repository: ghcr.io/rsmrtk/triton-drift-ops-gateway
+    tag: latest
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+retrainWebhook:
+  image:
+    repository: ghcr.io/rsmrtk/triton-drift-ops-retrain-webhook
+    tag: latest
+  trainImage: ghcr.io/rsmrtk/triton-drift-ops-training:latest
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi

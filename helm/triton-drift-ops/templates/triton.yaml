@@ -1,0 +1,89 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: triton-model-repository
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.triton.modelRepository.storageClass }}
+  storageClassName: {{ .Values.triton.modelRepository.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.triton.modelRepository.size }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: triton
+  labels:
+    app: triton
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: triton
+  template:
+    metadata:
+      labels:
+        app: triton
+    spec:
+      containers:
+        - name: triton
+          image: "{{ .Values.triton.image.repository }}:{{ .Values.triton.image.tag }}"
+          args:
+            - tritonserver
+            - --model-repository=/models
+            # poll mode: a new model version dropped into the PVC is
+            # picked up live — this is how promotion reaches serving
+            # without a pod restart
+            - --model-control-mode=poll
+            - --repository-poll-secs=10
+          ports:
+            - containerPort: 8000
+              name: http
+            - containerPort: 8001
+              name: grpc
+            - containerPort: 8002
+              name: metrics
+          volumeMounts:
+            - name: model-repository
+              mountPath: /models
+          readinessProbe:
+            httpGet:
+              path: /v2/health/ready
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests:
+              {{- toYaml .Values.triton.resources.requests | nindent 14 }}
+              {{- if .Values.triton.gpu }}
+              nvidia.com/gpu: "1"
+              {{- end }}
+            limits:
+              {{- toYaml .Values.triton.resources.limits | nindent 14 }}
+              {{- if .Values.triton.gpu }}
+              nvidia.com/gpu: "1"
+              {{- end }}
+      volumes:
+        - name: model-repository
+          persistentVolumeClaim:
+            claimName: triton-model-repository
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: triton
+  labels:
+    app: triton
+spec:
+  selector:
+    app: triton
+  ports:
+    - name: http
+      port: 8000
+    - name: grpc
+      port: 8001
+    - name: metrics
+      port: 8002

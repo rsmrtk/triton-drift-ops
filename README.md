@@ -24,17 +24,17 @@ FastAPI wrapper.
 ## Architecture
 
 ```
-                         ┌─────────────────────┐
-  traffic-sign images ──▶│  Triton Inference    │──▶ prediction + confidence
-                         │  Server (GPU)         │
-                         └──────────┬───────────┘
-                                    │ prediction logs
+                         ┌─────────────────────┐      ┌─────────────────────┐
+  traffic-sign images ──▶│  Inference gateway   │─────▶│  Triton Inference    │
+                         │  (FastAPI)            │◀─────│  Server (CPU/GPU)     │
+                         └──────────┬───────────┘      └─────────────────────┘
+                                    │ softmax confidence, every request
                                     ▼
                          ┌─────────────────────┐
-                         │  Drift monitor        │  compares live confidence /
-                         │  (Prometheus metrics)  │  embedding distribution vs.
-                         └──────────┬───────────┘  training baseline
-                                    │ drift score > threshold
+                         │  Drift monitor        │  KS-test: live confidence
+                         │  (Prometheus metrics)  │  distribution vs. training
+                         └──────────┬───────────┘  baseline
+                                    │ drift score > threshold, sustained
                                     ▼
                          ┌─────────────────────┐
                          │  Retraining trigger   │  Prometheus AlertManager
@@ -69,9 +69,9 @@ one is proven working:
 - [x] Stage 2 — MLflow tracking + model registry integration (`--log-mlflow` flag in `train.py`, `training/promote.py` with a promotion gate) — written, not yet run against a live MLflow server
 - [x] Stage 3 — Drift simulation (fog/night/noise/motion-blur transforms, `drift/transforms.py`) + offline drift evaluation (`drift/evaluate_drift.py`) + online drift monitor with Prometheus metrics (`drift/monitor.py`) — written, not yet run
 - [x] Stage 4 — Auto-retraining trigger: PrometheusRule on drift metrics (`k8s/alerts/drift-alert-rule.yaml`), AlertManager routing (`k8s/alerts/alertmanager-config.yaml`), idempotent webhook that creates a K8s training Job (`k8s/retrain-webhook`) — written, not yet run
-- [x] Stage 5 — NVIDIA Triton model repository + config (`serving/model_repository`), ONNX export (`serving/export_onnx.py`), HTTP client (`serving/client.py`), local `docker-compose.yaml` — written, not yet run
+- [x] Stage 5 — NVIDIA Triton model repository + config (`serving/model_repository`), ONNX export (`serving/export_onnx.py`), HTTP client (`serving/client.py`), inference gateway that feeds live confidences to the drift monitor (`serving/gateway`), local `docker-compose.yaml` — written, not yet run
 - [x] Stage 6 — Promotion gate (`training/promote.py` only promotes a version if its logged accuracy beats the current champion's)
-- [ ] Stage 7 — Helm charts + ArgoCD Application manifests
+- [x] Stage 7 — Helm chart for the whole stack with a CPU/GPU toggle (`helm/triton-drift-ops`), ArgoCD Application (`argocd/app.yaml`), CI building all three images (`.github/workflows/ci.yaml`) — lints and renders, not yet deployed
 - [ ] Stage 8 — End-to-end GPU run (cloud trial credits) + demo capture
 
 **Current limitation:** the full pipeline is written but not yet verified

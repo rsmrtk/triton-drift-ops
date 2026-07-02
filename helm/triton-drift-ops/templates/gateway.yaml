@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference-gateway
+  labels:
+    app: inference-gateway
+spec:
+  replicas: {{ .Values.gateway.replicas }}
+  selector:
+    matchLabels:
+      app: inference-gateway
+  template:
+    metadata:
+      labels:
+        app: inference-gateway
+      annotations:
+        # scraped by kube-prometheus-stack — the drift gauges the alert
+        # rules in k8s/alerts fire on come from this endpoint
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8081"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: gateway
+          image: "{{ .Values.gateway.image.repository }}:{{ .Values.gateway.image.tag }}"
+          ports:
+            - containerPort: 8081
+          env:
+            - name: TRITON_URL
+              value: "triton:8000"
+            - name: BASELINE_PATH
+              value: "/baseline/baseline_confidences.npy"
+          volumeMounts:
+            # baseline confidences live in the model repository PVC next
+            # to the model version they belong to
+            - name: model-repository
+              mountPath: /baseline
+              subPath: baseline
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8081
+            initialDelaySeconds: 5
+          resources:
+            {{- toYaml .Values.gateway.resources | nindent 12 }}
+      volumes:
+        - name: model-repository
+          persistentVolumeClaim:
+            claimName: triton-model-repository
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inference-gateway
+  labels:
+    app: inference-gateway
+spec:
+  selector:
+    app: inference-gateway
+  ports:
+    - port: 8081
