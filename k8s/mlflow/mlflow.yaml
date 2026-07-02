@@ -1,8 +1,21 @@
 # Minimal MLflow tracking server + model registry for the retrain loop.
-# Demo-grade on purpose: sqlite backend + emptyDir artifacts — enough for
-# the retrain Job (--log-mlflow) and the promotion gate (promote.py) to
-# run against a real server. A production install would use Postgres +
+# Demo-grade on purpose: sqlite backend + a small PVC — enough for the
+# retrain Job (--log-mlflow) and the promotion gate (promote.py) to run
+# against a real server. A production install would use Postgres +
 # object storage; nothing in the client code changes.
+# (PVC, not emptyDir: an evicted pod must not wipe the model registry —
+# learned the hard way when a DiskPressure eviction erased the champion.)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mlflow-store
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -47,7 +60,8 @@ spec:
               memory: 1Gi
       volumes:
         - name: store
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: mlflow-store
 ---
 apiVersion: v1
 kind: Service
