@@ -1,0 +1,24 @@
+# Local Triton smoke test before deploying to Kubernetes.
+#
+# CPU-only by default (matches config.pbtxt's KIND_CPU instance group).
+# For a GPU run, add `deploy.resources.reservations.devices` with
+# driver "nvidia" and switch config.pbtxt to KIND_GPU.
+#
+# Usage:
+#   docker compose up
+#   python client.py --image ../drift/sample.png --url localhost:8000
+
+services:
+  triton:
+    image: nvcr.io/nvidia/tritonserver:24.09-py3
+    command: >
+      tritonserver
+      --model-repository=/models
+      --model-control-mode=poll
+      --repository-poll-secs=10
+    ports:
+      - "8000:8000"  # HTTP inference
+      - "8001:8001"  # gRPC inference
+      - "8002:8002"  # metrics (Prometheus-scrapeable)
+    volumes:
+      - ./model_repository:/models

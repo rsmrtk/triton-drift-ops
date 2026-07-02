@@ -5,7 +5,9 @@ __pycache__/
 venv/
 
 # data & model artifacts — never commit datasets or trained weights
-data/
+# (downloaded GTSRB lives in training/gtsrb-data/, kept out of training/data/
+# so it doesn't collide with the training/data/ *code* package)
+/**/gtsrb-data/
 *.pt
 *.pth
 *.onnx

@@ -1,0 +1,34 @@
+name: "traffic_sign_classifier"
+platform: "onnxruntime_onnx"
+max_batch_size: 32
+
+input [
+  {
+    name: "input"
+    data_type: TYPE_FP32
+    dims: [ 3, 48, 48 ]
+  }
+]
+
+output [
+  {
+    name: "logits"
+    data_type: TYPE_FP32
+    dims: [ 43 ]
+  }
+]
+
+# CPU-friendly default so the config works without a GPU; the GPU stage
+# (stage 8) overrides this via a second config instance targeting the
+# KIND_GPU instance group instead of duplicating the whole file.
+instance_group [
+  {
+    count: 1
+    kind: KIND_CPU
+  }
+]
+
+dynamic_batching {
+  preferred_batch_size: [ 4, 8, 16 ]
+  max_queue_delay_microseconds: 5000
+}

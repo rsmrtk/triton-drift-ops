@@ -64,15 +64,22 @@ Built incrementally, in order — each stage only starts once the previous
 one is proven working:
 
 - [x] Repo scaffolding
-- [ ] Stage 0 — Docker + NVIDIA Container Toolkit smoke test (`docker/nvidia-smoke-test`)
-- [ ] Stage 1 — Baseline training run on GTSRB (clean data, CPU-friendly for dev)
-- [ ] Stage 2 — MLflow tracking + model registry integration
-- [ ] Stage 3 — Drift simulation (fog/night/noise transforms) + drift metrics
+- [x] Stage 0 — Docker + NVIDIA Container Toolkit smoke test (`docker/nvidia-smoke-test`) — written, not yet run on real GPU hardware
+- [x] Stage 1 — Baseline training script on GTSRB (`training/train.py`) — written, syntax-checked; not yet run end to end (blocked locally by disk space, see below)
+- [x] Stage 2 — MLflow tracking + model registry integration (`--log-mlflow` flag in `train.py`, `training/promote.py` with a promotion gate) — written, not yet run against a live MLflow server
+- [x] Stage 3 — Drift simulation (fog/night/noise/motion-blur transforms, `drift/transforms.py`) + offline drift evaluation (`drift/evaluate_drift.py`) + online drift monitor with Prometheus metrics (`drift/monitor.py`) — written, not yet run
 - [ ] Stage 4 — Auto-retraining trigger (Prometheus alert → K8s Job)
-- [ ] Stage 5 — NVIDIA Triton serving + model repository layout
-- [ ] Stage 6 — Promotion gate (new model must beat champion to be promoted)
+- [x] Stage 5 — NVIDIA Triton model repository + config (`serving/model_repository`), ONNX export (`serving/export_onnx.py`), HTTP client (`serving/client.py`), local `docker-compose.yaml` — written, not yet run
+- [x] Stage 6 — Promotion gate (`training/promote.py` only promotes a version if its logged accuracy beats the current champion's)
 - [ ] Stage 7 — Helm charts + ArgoCD Application manifests
 - [ ] Stage 8 — End-to-end GPU run (cloud trial credits) + demo capture
+
+**Current limitation:** the full pipeline is written but not yet verified
+end to end — local development ran out of disk space installing PyTorch,
+so no training run, MLflow logging, or Triton serving has actually been
+executed yet. Next concrete step is running `training/train.py` in a
+container (not a local venv) to validate the training loop before wiring
+up the rest.
 
 ## Stack
 
