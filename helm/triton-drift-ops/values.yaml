@@ -34,6 +34,12 @@ gateway:
       cpu: 500m
       memory: 512Mi
 
+championSync:
+  # exports the MLflow 'champion' alias into Triton's model repository
+  # (training/sync_champion.py); Triton's poll mode picks it up live
+  enabled: true
+  schedule: "*/1 * * * *"
+
 retrainWebhook:
   image:
     repository: ghcr.io/rsmrtk/triton-drift-ops-retrain-webhook

@@ -4,3 +4,5 @@ mlflow==2.16.0
 numpy>=1.26.4
 pillow>=10.4.0
 scikit-learn>=1.5.2
+# sync_champion.py exports champion weights to ONNX inside the cluster
+onnx>=1.16

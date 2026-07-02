@@ -1,0 +1,53 @@
+# Keeps Triton's model repository in lockstep with the MLflow registry:
+# every tick, the current 'champion' alias is exported to ONNX into the
+# shared PVC if it isn't there yet (training/sync_champion.py). Triton
+# polls the repository, so a promotion goes live without a restart.
+#
+# The PVC is RWO — that's fine here because the sync pod and the Triton
+# pod land on the same node in the single-node/demo setups this chart
+# targets; use RWX storage for multi-node clusters.
+{{- if .Values.championSync.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: champion-sync
+  labels:
+    app: champion-sync
+spec:
+  schedule: {{ .Values.championSync.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: champion-sync
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: champion-sync
+              image: {{ .Values.retrainWebhook.trainImage | quote }}
+              command: ["python", "sync_champion.py"]
+              env:
+                - name: MLFLOW_TRACKING_URI
+                  value: {{ .Values.retrainWebhook.mlflowTrackingUri | quote }}
+                - name: TRITON_KIND
+                  value: {{ .Values.triton.gpu | ternary "KIND_GPU" "KIND_CPU" | quote }}
+              volumeMounts:
+                - name: model-repository
+                  mountPath: /models
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 512Mi
+                limits:
+                  cpu: "1"
+                  memory: 2Gi
+          volumes:
+            - name: model-repository
+              persistentVolumeClaim:
+                claimName: triton-model-repository
+{{- end }}
