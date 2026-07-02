@@ -65,21 +65,43 @@ one is proven working:
 
 - [x] Repo scaffolding
 - [x] Stage 0 — Docker + NVIDIA Container Toolkit smoke test (`docker/nvidia-smoke-test`) — written, not yet run on real GPU hardware
-- [x] Stage 1 — Baseline training script on GTSRB (`training/train.py`) — written, syntax-checked; not yet run end to end (blocked locally by disk space, see below)
+- [x] Stage 1 — Baseline training script on GTSRB (`training/train.py`) — **validated on CPU**: 1 epoch, test accuracy 0.9096 (383 s), model + drift baseline saved
 - [x] Stage 2 — MLflow tracking + model registry integration (`--log-mlflow` flag in `train.py`, `training/promote.py` with a promotion gate) — written, not yet run against a live MLflow server
-- [x] Stage 3 — Drift simulation (fog/night/noise/motion-blur transforms, `drift/transforms.py`) + offline drift evaluation (`drift/evaluate_drift.py`) + online drift monitor with Prometheus metrics (`drift/monitor.py`) — written, not yet run
+- [x] Stage 3 — Drift simulation (fog/night/noise/motion-blur transforms, `drift/transforms.py`) + offline drift evaluation (`drift/evaluate_drift.py`) + online drift monitor with Prometheus metrics (`drift/monitor.py`) — **offline evaluation run against the trained model**, see the drift impact table below
 - [x] Stage 4 — Auto-retraining trigger: PrometheusRule on drift metrics (`k8s/alerts/drift-alert-rule.yaml`), AlertManager routing (`k8s/alerts/alertmanager-config.yaml`), idempotent webhook that creates a K8s training Job (`k8s/retrain-webhook`) — written, not yet run
 - [x] Stage 5 — NVIDIA Triton model repository + config (`serving/model_repository`), ONNX export (`serving/export_onnx.py`), HTTP client (`serving/client.py`), inference gateway that feeds live confidences to the drift monitor (`serving/gateway`), local `docker-compose.yaml` — written, not yet run
 - [x] Stage 6 — Promotion gate (`training/promote.py` only promotes a version if its logged accuracy beats the current champion's)
 - [x] Stage 7 — Helm chart for the whole stack with a CPU/GPU toggle (`helm/triton-drift-ops`), ArgoCD Application (`argocd/app.yaml`), CI building all three images (`.github/workflows/ci.yaml`) — lints and renders, not yet deployed
-- [ ] Stage 8 — End-to-end GPU run (cloud trial credits) + demo capture
+- [ ] Stage 8 — End-to-end GPU run (cloud trial credits) + demo capture — plan in [docs/stage8-gpu-run.md](docs/stage8-gpu-run.md); demo traffic generator in `scripts/traffic_generator.py`; **CPU training smoke run passed** (see Stage 1)
 
-**Current limitation:** the full pipeline is written but not yet verified
-end to end — local development ran out of disk space installing PyTorch,
-so no training run, MLflow logging, or Triton serving has actually been
-executed yet. Next concrete step is running `training/train.py` in a
-container (not a local venv) to validate the training loop before wiring
-up the rest.
+**Current limitation:** the training loop and offline drift evaluation are
+validated on CPU; what remains unverified end to end is the live serving
+side — MLflow against a real tracking server, Triton serving the exported
+model, and the alert → retrain Job path on a cluster. That is exactly the
+Stage 8 GPU run.
+
+## Drift impact (measured)
+
+Accuracy of the trained model (1 CPU epoch, GTSRB test split, 12 630
+images) under each synthetic drift scenario from `drift/transforms.py`:
+
+| Scenario | Accuracy | Δ vs clean |
+|---|---|---|
+| clean | 0.9096 | — |
+| noise (sensor) | 0.8188 | −9.1 pp |
+| night (low light) | 0.7682 | −14.1 pp |
+| motion blur | 0.6748 | −23.5 pp |
+| severe (fog+night+noise) | 0.6714 | −23.8 pp |
+| fog | 0.6654 | −24.4 pp |
+
+This is the offline answer to "what does drift cost?" — the online drift
+monitor exists to notice these situations from confidence distributions
+alone, without needing labels in production. Reproduce with:
+
+```bash
+cd drift
+python evaluate_drift.py --model ../training/model.pt --data-dir ../training/gtsrb-data
+```
 
 ## Stack
 
