@@ -73,12 +73,13 @@ one is proven working:
 - [x] Stage 6 — Promotion gate (`training/promote.py` only promotes a version if its logged accuracy beats the current champion's)
 - [x] Stage 7 — Helm chart for the whole stack with a CPU/GPU toggle (`helm/triton-drift-ops`), ArgoCD Application (`argocd/app.yaml`), CI building all three images (`.github/workflows/ci.yaml`) — lints and renders, not yet deployed
 - [x] Stage 8 — End-to-end GPU run — **done on GCP (g2-standard-4, 1× L4)**: training, Triton GPU serving, live drift detection and a firing Prometheus alert; measured results below. Plan/runbook in [docs/stage8-gpu-run.md](docs/stage8-gpu-run.md)
+- [x] Stage 9 — GitOps + registry-to-serving bridge — **verified on k3d**: ArgoCD syncs the chart from this repo (self-heal picked up fixes pushed mid-run), and `champion-sync` (`training/sync_champion.py`) exports the MLflow champion + its drift baseline into Triton's repository, which poll-loads it **without a restart** (model `ready` went 400 → 200 on a running pod)
 
-**Current limitation:** every hop of the loop has now run for real
-somewhere (GPU serving + live drift on the VM; alert → Job → registry →
-gate on k3d). What hasn't been exercised is the glue at the very end:
-ArgoCD-managed deployment of the full chart and Triton hot-reloading the
-new champion from the registry.
+**Current limitation:** the demo deployment is single-node by design —
+RWO PVCs, sqlite-backed MLflow, and the gateway only loads the drift
+baseline at startup (a new champion's baseline needs a gateway rollout
+to take effect). The retraining Job has run on CPU in-cluster and on the
+L4 via docker, but not yet as a Job on a GPU cluster.
 
 ## Retrain loop — verified on k3d
 
@@ -95,6 +96,10 @@ The reaction half of the pipeline, run on a CPU-only k3d cluster
 4. `promote.py` promotes it to `champion` only through the gate:
    first version promoted unconditionally; a candidate that doesn't
    beat the champion's accuracy is **refused** (both branches verified).
+5. The `champion-sync` CronJob notices the new champion, exports it to
+   ONNX into Triton's model repository (plus the run's baseline
+   confidences for the drift monitor), and Triton's poll mode loads the
+   new version live — promotion reaches serving with no restart.
 
 ## Stage 8 — measured GPU results
 
