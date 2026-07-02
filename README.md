@@ -66,19 +66,35 @@ one is proven working:
 - [x] Repo scaffolding
 - [x] Stage 0 — Docker + NVIDIA Container Toolkit smoke test (`docker/nvidia-smoke-test`) — **passed on a real L4** (GCP g2-standard-4, driver 580, CUDA 13.0)
 - [x] Stage 1 — Baseline training script on GTSRB (`training/train.py`) — **validated on CPU**: 1 epoch, test accuracy 0.9096 (383 s), model + drift baseline saved
-- [x] Stage 2 — MLflow tracking + model registry integration (`--log-mlflow` flag in `train.py`, `training/promote.py` with a promotion gate) — written, not yet run against a live MLflow server
+- [x] Stage 2 — MLflow tracking + model registry integration (`--log-mlflow` flag in `train.py`, `training/promote.py` with a promotion gate) — **verified against a live MLflow server on k3d** (run logged, model version registered, gate exercised both ways)
 - [x] Stage 3 — Drift simulation (fog/night/noise/motion-blur transforms, `drift/transforms.py`) + offline drift evaluation (`drift/evaluate_drift.py`) + online drift monitor with Prometheus metrics (`drift/monitor.py`) — **offline evaluation run against the trained model**, see the drift impact table below
-- [x] Stage 4 — Auto-retraining trigger: PrometheusRule on drift metrics (`k8s/alerts/drift-alert-rule.yaml`), AlertManager routing (`k8s/alerts/alertmanager-config.yaml`), idempotent webhook that creates a K8s training Job (`k8s/retrain-webhook`) — written, not yet run
+- [x] Stage 4 — Auto-retraining trigger: PrometheusRule on drift metrics (`k8s/alerts/drift-alert-rule.yaml`), AlertManager routing (`k8s/alerts/alertmanager-config.yaml`), idempotent webhook that creates a K8s training Job (`k8s/retrain-webhook`) — **verified on k3d**, see the retrain-loop section below
 - [x] Stage 5 — NVIDIA Triton model repository + config (`serving/model_repository`), ONNX export (`serving/export_onnx.py`), HTTP client (`serving/client.py`), inference gateway that feeds live confidences to the drift monitor (`serving/gateway`), local `docker-compose.yaml` — **verified on GPU**: Triton served the ONNX model on an L4, 4 200+ inferences through the gateway, 0 errors
 - [x] Stage 6 — Promotion gate (`training/promote.py` only promotes a version if its logged accuracy beats the current champion's)
 - [x] Stage 7 — Helm chart for the whole stack with a CPU/GPU toggle (`helm/triton-drift-ops`), ArgoCD Application (`argocd/app.yaml`), CI building all three images (`.github/workflows/ci.yaml`) — lints and renders, not yet deployed
 - [x] Stage 8 — End-to-end GPU run — **done on GCP (g2-standard-4, 1× L4)**: training, Triton GPU serving, live drift detection and a firing Prometheus alert; measured results below. Plan/runbook in [docs/stage8-gpu-run.md](docs/stage8-gpu-run.md)
 
-**Current limitation:** two pieces have still only run in CI/lint, not
-live: MLflow tracking against a real server (training ran without
-`--log-mlflow` on the GPU box) and the AlertManager → webhook → K8s
-retraining Job path, which needs a cluster — next step is replaying that
-loop on a local k3d cluster (CPU is enough for it).
+**Current limitation:** every hop of the loop has now run for real
+somewhere (GPU serving + live drift on the VM; alert → Job → registry →
+gate on k3d). What hasn't been exercised is the glue at the very end:
+ArgoCD-managed deployment of the full chart and Triton hot-reloading the
+new champion from the registry.
+
+## Retrain loop — verified on k3d
+
+The reaction half of the pipeline, run on a CPU-only k3d cluster
+(kube-prometheus-stack + MLflow + the chart's retrain-webhook,
+`TRAIN_DEVICE=cpu`):
+
+1. A `ModelDriftDetected` alert (replay of the real one the GPU run
+   produced) hits AlertManager, which routes on the `action: retrain`
+   label to the webhook.
+2. The webhook creates a training Job — and **skips** when a second
+   alert arrives while one is running (idempotency, verified).
+3. The Job trains, logs to MLflow and registers a new model version.
+4. `promote.py` promotes it to `champion` only through the gate:
+   first version promoted unconditionally; a candidate that doesn't
+   beat the champion's accuracy is **refused** (both branches verified).
 
 ## Stage 8 — measured GPU results
 
